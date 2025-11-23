@@ -19,6 +19,7 @@
 #include "shake.h"
 #include "hltv.h"
 #include "Exports.h"
+#include "min_and_max.h"
 
 int CL_IsThirdPerson();
 void CL_CameraOffset(float* ofs);
@@ -62,6 +63,7 @@ extern cvar_t* cl_vsmoothing;
 extern cvar_t* cl_rollangle;
 extern cvar_t* cl_rollspeed;
 extern cvar_t* cl_bobtilt;
+extern cvar_t* cl_smooth_uncrouch;
 
 #define CAM_MODE_RELAX 1
 #define CAM_MODE_FOCUS 2
@@ -493,6 +495,7 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 
 	static float oldz = 0;
 	static float lasttime;
+	static Vector viewheight = VEC_VIEW;
 
 	Vector camAngles, camForward, camRight, camUp;
 	cl_entity_t* pwater;
@@ -516,10 +519,31 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 	// model origin for the view
 	bob = V_CalcBob(pparams);
 
+	const float defaultViewHeight = 28.0f;
+
+	// Check if the crouch fix CVar exists and is enabled
+	if (cl_smooth_uncrouch && cl_smooth_uncrouch->value != 0.0f)
+	{
+		if (pparams->viewheight[2] == defaultViewHeight && viewheight[2] < defaultViewHeight)
+		{
+			viewheight[2] += pparams->frametime * 17.0f * (defaultViewHeight - viewheight[2]);
+			viewheight[2] = Q_min(viewheight[2], defaultViewHeight);
+		}
+		else
+		{
+			viewheight[2] = pparams->viewheight[2];
+		}
+	}
+	else
+	{
+		// If the CVar is off, just use the original viewheight
+		viewheight[2] = pparams->viewheight[2];
+	}
+
 	// refresh position
 	VectorCopy(pparams->simorg, pparams->vieworg);
 	pparams->vieworg[2] += (bob);
-	VectorAdd(pparams->vieworg, pparams->viewheight, pparams->vieworg);
+	VectorAdd(pparams->vieworg, viewheight, pparams->vieworg);
 
 	VectorCopy(pparams->cl_viewangles, pparams->viewangles);
 
@@ -642,7 +666,7 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 	// Use predicted origin as view origin.
 	VectorCopy(pparams->simorg, view->origin);
 	view->origin[2] += (waterOffset);
-	VectorAdd(view->origin, pparams->viewheight, view->origin);
+	VectorAdd(view->origin, viewheight, view->origin);
 
 	// Let the viewmodel shake at about 10% of the amplitude
 	gEngfuncs.V_ApplyShake(view->origin, view->angles, 0.9);
