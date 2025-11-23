@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <memory.h>
 
+extern cvar_t* cl_smooth_zoom;
+
 int CL_ButtonBits(bool);
 void CL_ResetButtonBits(int bits);
 
@@ -41,7 +43,26 @@ bool CHud::UpdateClientData(client_data_t* cdata, float time)
 
 	Think();
 
-	cdata->fov = m_iFOV;
+	float speed = 0.0f;
+
+	switch ((int)cl_smooth_zoom->value)
+	{
+	case 0: speed = 0.0f; break;  // Disabled
+	case 1: speed = 10.0f; break; // Slow
+	case 2: speed = 20.0f; break; // Average
+	case 3: speed = 30.0f; break; // Fast
+	}
+
+	if (speed > 0.0f)
+	{
+		float flInterp = 1.0f - expf(-speed * (float)m_flTimeDelta);
+
+		cdata->fov = cdata->fov + (m_iFOV - cdata->fov) * flInterp;
+	}
+	else
+	{
+		cdata->fov = m_iFOV;
+	}
 
 	v_idlescale = m_iConcussionEffect;
 
