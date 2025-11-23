@@ -64,6 +64,7 @@ extern cvar_t* cl_rollangle;
 extern cvar_t* cl_rollspeed;
 extern cvar_t* cl_bobtilt;
 extern cvar_t* cl_smooth_uncrouch;
+extern cvar_t* cl_viewmodel_shift;
 
 #define CAM_MODE_RELAX 1
 #define CAM_MODE_FOCUS 2
@@ -686,28 +687,32 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 		VectorCopy(view->angles, view->curstate.angles);
 	}
 
-	// pushing the view origin down off of the same X/Z plane as the ent's origin will give the
-	// gun a very nice 'shifting' effect when the player looks up/down. If there is a problem
-	// with view model distortion, this may be a cause. (SJB).
-	view->origin[2] -= 1;
+	if (cl_viewmodel_shift && cl_viewmodel_shift->value == 0.0f)
+	{
+		view->origin[2] -= 1.0f;
 
-	// fudge position around to keep amount of weapon visible
-	// roughly equal with different FOV
-	if (pparams->viewsize == 110)
-	{
-		view->origin[2] += 1;
+		if (pparams->viewsize == 110.0f)
+			view->origin[2] += 1.0f;
+		else if (pparams->viewsize == 100.0f)
+			view->origin[2] += 2.0f;
+		else if (pparams->viewsize == 90.0f)
+			view->origin[2] += 1.0f;
+		else if (pparams->viewsize == 80.0f)
+			view->origin[2] += 0.5f;
 	}
-	else if (pparams->viewsize == 100)
+	else
 	{
-		view->origin[2] += 2;
-	}
-	else if (pparams->viewsize == 90)
-	{
-		view->origin[2] += 1;
-	}
-	else if (pparams->viewsize == 80)
-	{
-		view->origin[2] += 0.5;
+		float vm_z_offset = -1.0f;
+		VectorMA(view->origin, vm_z_offset, pparams->up, view->origin);
+
+		if (pparams->viewsize == 110.0f)
+			VectorMA(view->origin, 1.0f, pparams->up, view->origin);
+		else if (pparams->viewsize == 100.0f)
+			VectorMA(view->origin, 2.0f, pparams->up, view->origin);
+		else if (pparams->viewsize == 90.0f)
+			VectorMA(view->origin, 1.0f, pparams->up, view->origin);
+		else if (pparams->viewsize == 80.0f)
+			VectorMA(view->origin, 0.5f, pparams->up, view->origin);
 	}
 
 	// Add in the punchangle, if any
