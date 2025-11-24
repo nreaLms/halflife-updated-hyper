@@ -56,6 +56,13 @@ entities sent from the server may not include everything in the pvs, especially
 when crossing a water boudnary.
 */
 
+template <typename T>
+
+inline T clamp(const T& val, const T& minVal, const T& maxVal)
+{
+	return (val < minVal) ? minVal : (val > maxVal ? maxVal : val);
+}
+
 extern cvar_t* cl_forwardspeed;
 extern cvar_t* chase_active;
 extern cvar_t *scr_ofsx, *scr_ofsy, *scr_ofsz;
@@ -65,6 +72,7 @@ extern cvar_t* cl_rollspeed;
 extern cvar_t* cl_bobtilt;
 extern cvar_t* cl_smooth_uncrouch;
 extern cvar_t* cl_viewmodel_shift;
+extern cvar_t* cl_viewmodel_sway;
 
 #define CAM_MODE_RELAX 1
 #define CAM_MODE_FOCUS 2
@@ -685,6 +693,91 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 		view->angles[ROLL] -= bob * 1;
 		view->angles[PITCH] -= bob * 0.3;
 		VectorCopy(view->angles, view->curstate.angles);
+	}
+
+	// Only apply viewmodel yaw/pitch sway if cvar enabled
+	float swayScale = 0.0f;
+
+	switch ((int)cl_viewmodel_sway->value)
+	{
+	case 0: swayScale = 0.0f; break; // Off
+	case 1: swayScale = 0.5f; break; // Light  (50% of Medium)
+	case 2: swayScale = 1.0f; break; // Medium (baseline)
+	case 3: swayScale = 1.5f; break; // Heavy  (150%)
+	case 4: swayScale = 2.0f; break; // Insane (200%)
+	}
+
+	if (swayScale > 0.0f)
+	{
+		cl_entity_t* vm = gEngfuncs.GetViewModel();
+		if (vm)
+		{
+			const float base_scale = 1.5f;
+			const float base_maxTwist = 20.0f;
+			const float base_smoothTau = 8.0f;
+			const float base_decay = 6.0f;
+
+			const float scale = base_scale * swayScale;
+			const float maxTwist = base_maxTwist * swayScale;
+			const float smoothTau = base_smoothTau * swayScale;
+			const float decay = base_decay * swayScale;
+			{
+				static float lastYaw = 0.0f;
+				static float accYaw = 0.0f;
+
+				float yaw = pparams->viewangles[YAW];
+				float dy = yaw - lastYaw;
+
+				if (dy > 180.0f)
+					dy -= 360.0f;
+				if (dy < -180.0f)
+					dy += 360.0f;
+
+				lastYaw = yaw;
+
+				float desired = dy * scale;
+				desired = clamp(desired, -maxTwist, maxTwist);
+
+				float alpha = 1.0f - expf(-pparams->frametime * smoothTau);
+				accYaw += (desired - accYaw) * alpha;
+				accYaw *= expf(-pparams->frametime * decay);
+				accYaw = clamp(accYaw, -maxTwist, maxTwist);
+
+				view->angles[YAW] += accYaw;
+			}
+			{
+				static float lastPitch = 0.0f;
+				static float accPitch = 0.0f;
+
+				float pitch = pparams->viewangles[PITCH];
+				float dp = pitch - lastPitch;
+
+				if (dp > 180.0f)
+					dp -= 360.0f;
+				if (dp < -180.0f)
+					dp += 360.0f;
+
+				lastPitch = pitch;
+
+				float desired = dp * scale;
+				desired = clamp(desired, -maxTwist, maxTwist);
+
+				float alpha = 1.0f - expf(-pparams->frametime * smoothTau);
+				accPitch += (desired - accPitch) * alpha;
+				accPitch *= expf(-pparams->frametime * decay);
+				accPitch = clamp(accPitch, -maxTwist, maxTwist);
+
+				view->angles[PITCH] -= accPitch;
+			}
+
+			for (int ai = 0; ai < 3; ++ai)
+			{
+				while (view->angles[ai] > 180.0f)
+					view->angles[ai] -= 360.0f;
+				while (view->angles[ai] < -180.0f)
+					view->angles[ai] += 360.0f;
+			}
+		}
 	}
 
 	if (cl_viewmodel_shift && cl_viewmodel_shift->value == 0.0f)
