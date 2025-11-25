@@ -73,6 +73,7 @@ extern cvar_t* cl_bobtilt;
 extern cvar_t* cl_smooth_uncrouch;
 extern cvar_t* cl_viewmodel_shift;
 extern cvar_t* cl_viewmodel_sway;
+extern cvar_t* cl_cam_jumpland;
 
 #define CAM_MODE_RELAX 1
 #define CAM_MODE_FOCUS 2
@@ -951,6 +952,88 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 			// Store off overridden viewangles
 			v_angles = pparams->viewangles;
 		}
+	}
+
+	// --- Camera bump on landing & weapon pitch on jump/landing (aligned viewmodel) ---
+	if (cl_cam_jumpland && cl_cam_jumpland->value >= 0.0f)
+	{
+		static bool wasOnGround = true;
+		static float lastFallVel = 0.0f;
+
+		static float bump = 0.0f, bumpGoal = 0.0f;
+		static float pitch = 0.0f, pitchGoal = 0.0f;
+
+		const float minJumpVel = 150.0f; // minimum upward velocity to count as jump
+		const float minFallVel = 50.0f;	 // ignore tiny falls
+
+		// Map CVar to intensity scale
+		float intensityScale = 0.0f; // Off by default
+		switch ((int)cl_cam_jumpland->value)
+		{
+		case 0: intensityScale = 0.0f; break; // Off
+		case 1: intensityScale = 0.5f; break; // Light
+		case 2: intensityScale = 1.0f; break; // Medium
+		case 3: intensityScale = 1.5f; break; // Heavy
+		}
+
+		if (intensityScale == 0.0f)
+			return; // skip effect if Off
+
+		// Track downward velocity while in air
+		if (pparams->onground != 1)
+			lastFallVel = Q_min(lastFallVel, pparams->simvel[2]);
+
+		// Landing: calculate bump and pitch goals
+		if (pparams->onground == 1 && !wasOnGround)
+		{
+			float fallVel = -lastFallVel; // positive downward speed
+			lastFallVel = 0.0f;
+
+			bumpGoal = (-4.0f - 12.0f * Q_min(fallVel / 300.0f, 1.0f)) * intensityScale;
+
+			if (fallVel > minFallVel)
+				pitchGoal = (2.0f + 6.0f * Q_min(fallVel / 400.0f, 1.0f)) * intensityScale;
+		}
+
+		// Jump: intensified downward tilt
+		if (pparams->onground != 1 && wasOnGround && pparams->simvel[2] > minJumpVel)
+		{
+			pitchGoal = 8.0f * intensityScale;
+		}
+
+		// Slow effects underwater
+		float waterFactor = (pparams->waterlevel > 0) ? 0.5f : 1.0f;
+
+		// Smoothly approach goals
+		float bumpSpeed = 16.0f * waterFactor * pparams->frametime;
+		float pitchSpeed = 8.0f * waterFactor * pparams->frametime;
+
+		bump += (bumpGoal - bump) * bumpSpeed;
+		pitch += (pitchGoal - pitch) * pitchSpeed;
+
+		// Gradually reset goals to 0
+		float resetSpeedBump = 6.0f * waterFactor * pparams->frametime;
+		float resetSpeedPitch = 6.0f * waterFactor * pparams->frametime;
+
+		// Increase pitch decay if player is on the ground (landing recovery)
+		if (pparams->onground == 1)
+			resetSpeedPitch *= 2.0f; // double decay speed for landing pitch
+
+		bumpGoal += (0.0f - bumpGoal) * resetSpeedBump;
+		pitchGoal += (0.0f - pitchGoal) * resetSpeedPitch;
+
+		// Apply bump to camera and viewmodel position
+		pparams->vieworg[2] += bump;
+		view->origin[2] += bump * 1.12f;
+
+		// Apply pitch to camera
+		pparams->viewangles[PITCH] += pitch;
+
+		// Apply subtle pitch to viewmodel for alignment
+		const float viewmodelPitchFactor = -2.0f;
+		view->angles[PITCH] += pitch * viewmodelPitchFactor;
+
+		wasOnGround = (pparams->onground == 1);
 	}
 
 	// Update the latched view origin/angles here, this was

@@ -90,6 +90,7 @@ cvar_t* cl_smooth_uncrouch = nullptr;
 cvar_t* cl_smooth_zoom = nullptr;
 cvar_t* cl_viewmodel_shift = nullptr;
 cvar_t* cl_viewmodel_sway = nullptr;
+cvar_t* cl_cam_jumpland = nullptr;
 
 void ShutdownInput();
 
@@ -343,6 +344,7 @@ void CHud::Init()
 	cl_smooth_zoom = CVAR_CREATE("cl_smooth_zoom", "0", FCVAR_ARCHIVE);
 	cl_viewmodel_shift = CVAR_CREATE("cl_viewmodel_shift", "1", FCVAR_ARCHIVE);
 	cl_viewmodel_sway = CVAR_CREATE("cl_viewmodel_sway", "0", FCVAR_ARCHIVE);
+	cl_cam_jumpland = CVAR_CREATE("cl_cam_jumpland", "0", FCVAR_ARCHIVE);
 	r_decals = gEngfuncs.pfnGetCvarPointer("r_decals");
 
 	m_pSpriteList = NULL;
