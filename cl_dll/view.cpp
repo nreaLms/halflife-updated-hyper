@@ -686,7 +686,7 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 	}
 	view->origin[2] += bob;
 
-	if (0 != cl_bobtilt->value)
+	if (0 == cl_bobtilt->value)
 	{
 		// throw in a little tilt.
 		view->angles[YAW] -= bob * 0.5;
