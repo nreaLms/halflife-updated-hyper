@@ -75,6 +75,7 @@ extern cvar_t* cl_viewmodel_shift;
 extern cvar_t* cl_viewmodel_sway;
 extern cvar_t* cl_cam_jumpland;
 extern cvar_t* cl_bobstyle;
+extern cvar_t* cl_bob_head;
 
 #define CAM_MODE_RELAX 1
 #define CAM_MODE_FOCUS 2
@@ -698,6 +699,24 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 
 	// Let the viewmodel shake at about 10% of the amplitude
 	gEngfuncs.V_ApplyShake(view->origin, view->angles, 0.9);
+
+	// HACKHACK, could not properly turn off head bob when using Default bob style
+	if (cl_bobstyle && cl_bobstyle->value == 0.0f)
+	{
+		gEngfuncs.Cvar_SetValue("cl_bob_head", 0.0f);
+	}
+
+	if (cl_bob_head && cl_bob_head->value != 0.0f &&
+		cl_bobstyle && cl_bobstyle->value != 0.0f)
+	{
+		if (cl_bobstyle->value == 2.0f)
+			pparams->viewangles[PITCH] -= bobUp * 0.15f;
+		else
+			pparams->viewangles[PITCH] += bobUp * 0.15f;
+
+		pparams->viewangles[YAW] -= bobRight * 0.15f;
+		pparams->viewangles[ROLL] += bobRight * 0.05f;
+	}
 
 	if (cl_bobstyle && cl_bobstyle->value != 0)
 	{
