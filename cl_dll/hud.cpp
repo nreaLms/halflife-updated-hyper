@@ -91,6 +91,7 @@ cvar_t* cl_smooth_zoom = nullptr;
 cvar_t* cl_viewmodel_shift = nullptr;
 cvar_t* cl_viewmodel_sway = nullptr;
 cvar_t* cl_cam_jumpland = nullptr;
+cvar_t* cl_bobstyle = nullptr;
 
 void ShutdownInput();
 
@@ -340,6 +341,7 @@ void CHud::Init()
 	cl_rollangle = CVAR_CREATE("cl_rollangle", "2.0", FCVAR_ARCHIVE);
 	cl_rollspeed = CVAR_CREATE("cl_rollspeed", "200", FCVAR_ARCHIVE);
 	cl_bobtilt = CVAR_CREATE("cl_bobtilt", "0", FCVAR_ARCHIVE);
+	cl_bobstyle = CVAR_CREATE("cl_bobstyle", "0", FCVAR_ARCHIVE);
 	cl_smooth_uncrouch = CVAR_CREATE("cl_smooth_uncrouch", "0", FCVAR_ARCHIVE);
 	cl_smooth_zoom = CVAR_CREATE("cl_smooth_zoom", "0", FCVAR_ARCHIVE);
 	cl_viewmodel_shift = CVAR_CREATE("cl_viewmodel_shift", "1", FCVAR_ARCHIVE);

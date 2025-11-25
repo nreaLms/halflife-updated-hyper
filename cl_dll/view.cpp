@@ -74,6 +74,7 @@ extern cvar_t* cl_smooth_uncrouch;
 extern cvar_t* cl_viewmodel_shift;
 extern cvar_t* cl_viewmodel_sway;
 extern cvar_t* cl_cam_jumpland;
+extern cvar_t* cl_bobstyle;
 
 #define CAM_MODE_RELAX 1
 #define CAM_MODE_FOCUS 2
@@ -171,27 +172,23 @@ void V_InterpolateAngles( float *start, float *end, float *output, float frac )
 } */
 
 // Quakeworld bob code, this fixes jitters in the mutliplayer since the clock (pparams->time) isn't quite linear
-float V_CalcBob(struct ref_params_s* pparams)
+void V_CalcBob(struct ref_params_s* pparams, float freqmod, double& bobtime, float& bob, float& lasttime)
 {
-	static double bobtime = 0;
-	static float bob = 0;
 	float cycle;
-	static float lasttime = 0;
 	Vector vel;
 
 
 	if (pparams->onground == -1 ||
 		pparams->time == lasttime)
 	{
-		// just use old value
-		return bob;
+		return;
 	}
 
 	lasttime = pparams->time;
 
 	//TODO: bobtime will eventually become a value so large that it will no longer behave properly.
 	//Consider resetting the variable if a level change is detected (pparams->time < lasttime might do the trick).
-	bobtime += pparams->frametime;
+	bobtime += pparams->frametime * freqmod;
 	cycle = bobtime - (int)(bobtime / cl_bobcycle->value) * cl_bobcycle->value;
 	cycle /= cl_bobcycle->value;
 
@@ -210,10 +207,20 @@ float V_CalcBob(struct ref_params_s* pparams)
 	vel[2] = 0;
 
 	bob = sqrt(vel[0] * vel[0] + vel[1] * vel[1]) * cl_bob->value;
-	bob = bob * 0.3 + bob * 0.7 * sin(cycle);
+
+	if (cl_bobstyle && cl_bobstyle->value == 1)
+	{
+		bob = bob * 0.3 + bob * 0.7 * sin(cycle);
+	}
+	else if (cl_bobstyle && cl_bobstyle->value >= 2)
+	{
+		bob = bob * 0.3 + bob * 0.7 * cos(cycle);
+	}
+	else
+		bob = bob * 0.3 + bob * 0.7 * sin(cycle);
+
 	bob = V_min(bob, 4.0f);
 	bob = V_max(bob, -7.0f);
-	return bob;
 }
 
 /*
@@ -500,12 +507,15 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 	cl_entity_t *ent, *view;
 	int i;
 	Vector angles;
-	float bob, waterOffset;
+	float bobRight = 0, bobUp = 0, bobForward = 0, waterOffset;
 	static viewinterp_t ViewInterp;
 
 	static float oldz = 0;
 	static float lasttime;
 	static Vector viewheight = VEC_VIEW;
+
+	static double bobtimes[3] = {0, 0, 0};
+	static float lasttimes[3] = {0, 0, 0};
 
 	Vector camAngles, camForward, camRight, camUp;
 	cl_entity_t* pwater;
@@ -525,9 +535,18 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 	// view is the weapon model (only visible from inside body )
 	view = gEngfuncs.GetViewModel();
 
-	// transform the view offset by the model's matrix to get the offset from
-	// model origin for the view
-	bob = V_CalcBob(pparams);
+	if (cl_bobstyle && cl_bobstyle->value != 0)
+	{
+		V_CalcBob(pparams, 0.85f, bobtimes[0], bobRight, lasttimes[0]);	 // right
+		V_CalcBob(pparams, 1.7f, bobtimes[1], bobUp, lasttimes[1]);		 // up
+		V_CalcBob(pparams, 0.0f, bobtimes[2], bobForward, lasttimes[2]); // forward
+	}
+	else
+	{
+		V_CalcBob(pparams, 0.0f, bobtimes[0], bobRight, lasttimes[0]);	 // right
+		V_CalcBob(pparams, 0.0f, bobtimes[1], bobUp, lasttimes[1]);		 // up
+		V_CalcBob(pparams, 1.0f, bobtimes[2], bobForward, lasttimes[2]); // forward
+	}
 
 	const float defaultViewHeight = 28.0f;
 
@@ -552,7 +571,6 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 
 	// refresh position
 	VectorCopy(pparams->simorg, pparams->vieworg);
-	pparams->vieworg[2] += (bob);
 	VectorAdd(pparams->vieworg, viewheight, pparams->vieworg);
 
 	VectorCopy(pparams->cl_viewangles, pparams->viewangles);
@@ -681,19 +699,34 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 	// Let the viewmodel shake at about 10% of the amplitude
 	gEngfuncs.V_ApplyShake(view->origin, view->angles, 0.9);
 
-	for (i = 0; i < 3; i++)
+	if (cl_bobstyle && cl_bobstyle->value != 0)
 	{
-		view->origin[i] += bob * 0.4 * pparams->forward[i];
-	}
-	view->origin[2] += bob;
+		for (i = 0; i < 3; i++)
+		{
+			view->origin[i] += bobRight * 0.25 * pparams->right[i];
 
-	if (0 == cl_bobtilt->value)
+			if (cl_bobstyle && cl_bobstyle->value == 2)
+			{
+				view->origin[i] += bobUp * 0.25 * pparams->up[i];
+			}
+			else
+				view->origin[i] -= bobUp * 0.25 * pparams->up[i];
+
+			view->origin[i] += bobForward * 0.0 * pparams->forward[i];
+		}
+		view->angles[YAW] -= bobRight * 1.0;
+	}
+	else
 	{
-		// throw in a little tilt.
-		view->angles[YAW] -= bob * 0.5;
-		view->angles[ROLL] -= bob * 1;
-		view->angles[PITCH] -= bob * 0.3;
-		VectorCopy(view->angles, view->curstate.angles);
+		for (i = 0; i < 3; i++)
+		{
+			view->origin[i] += bobRight * 0.0 * pparams->right[i];
+			view->origin[i] += bobUp * 0.0 * pparams->up[i];
+			view->origin[i] += bobForward * 0.4 * pparams->forward[i];
+		}
+		view->angles[YAW] -= bobForward * 0.5f;
+		view->angles[ROLL] -= bobForward * 1.0f;
+		view->angles[PITCH] -= bobForward * 0.3f;
 	}
 
 	// Only apply viewmodel yaw/pitch sway if cvar enabled
@@ -955,7 +988,7 @@ void V_CalcNormalRefdef(struct ref_params_s* pparams)
 	}
 
 	// --- Camera bump on landing & weapon pitch on jump/landing (aligned viewmodel) ---
-	if (cl_cam_jumpland && cl_cam_jumpland->value >= 0.0f)
+	if (cl_cam_jumpland && cl_cam_jumpland->value != 0)
 	{
 		static bool wasOnGround = true;
 		static float lastFallVel = 0.0f;
